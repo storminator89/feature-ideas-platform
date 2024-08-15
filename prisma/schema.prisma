@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  name      String?
+  password  String
+  ideas     Idea[]
+  votes     Vote[]
+  comments  Comment[]
+  role      Role      @default(USER)
+  createdAt DateTime  @default(now())
+}
+
+model Idea {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  author      User     @relation(fields: [authorId], references: [id])
+  authorId    Int
+  category    Category @relation(fields: [categoryId], references: [id])
+  categoryId  Int
+  comments    Comment[]
+  votes       Vote[]
+  status      String   @default("pending")
+}
+
+model Vote {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  idea      Idea     @relation(fields: [ideaId], references: [id])
+  ideaId    Int
+  createdAt DateTime @default(now())
+
+  @@unique([userId, ideaId])
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  content   String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  idea      Idea     @relation(fields: [ideaId], references: [id])
+  ideaId    Int
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  ideas Idea[]
+}
+
+enum Role {
+  USER
+  ADMIN
+}
