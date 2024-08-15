@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Session } from 'next-auth';
 import { HandThumbUpIcon, ClockIcon, UserIcon, ChatBubbleLeftEllipsisIcon, ShareIcon, TrashIcon, EyeIcon } from '@heroicons/react/24/outline';
 import CommentSection from './CommentSection';
@@ -37,10 +37,19 @@ const IdeaList: React.FC<IdeaListProps> = ({ ideas, onVote, onDelete, session })
   const [expandedIdeas, setExpandedIdeas] = useState<number[]>([]);
   const [showComments, setShowComments] = useState<number | null>(null);
   const [commentCounts, setCommentCounts] = useState<{[key: number]: number}>({});
+  const [formattedDates, setFormattedDates] = useState<{[key: number]: string}>({});
+
+  useEffect(() => {
+    const newFormattedDates = ideas.reduce((acc, idea) => {
+      acc[idea.id] = formatDate(idea.createdAt);
+      return acc;
+    }, {} as {[key: number]: string});
+    setFormattedDates(newFormattedDates);
+  }, [ideas]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}`;
+    return date.toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' });
   };
 
   const toggleExpand = (ideaId: number) => {
@@ -87,7 +96,7 @@ const IdeaList: React.FC<IdeaListProps> = ({ ideas, onVote, onDelete, session })
               </span>
               <div className="flex items-center text-gray-500 text-xs">
                 <ClockIcon className="h-4 w-4 mr-1" />
-                {formatDate(idea.createdAt)}
+                <span suppressHydrationWarning>{formattedDates[idea.id] || formatDate(idea.createdAt)}</span>
               </div>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">{idea.title}</h3>

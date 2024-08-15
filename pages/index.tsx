@@ -274,7 +274,7 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
                   ideas={filteredIdeas}
                   onVote={handleVote}
                   onDelete={handleDeleteIdea}
-                  session={session}
+                  session={session}               
                 />
               </div>
             </div>
@@ -287,6 +287,7 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = await getSession(context)
+  const serverTime = new Date().toISOString()
 
   const [ideas, categories] = await Promise.all([
     prisma.idea.findMany({
