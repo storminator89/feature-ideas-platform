@@ -1,7 +1,7 @@
 import { GetServerSideProps } from 'next'
 import { getSession } from 'next-auth/react'
 import Head from 'next/head'
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import Navigation from '../components/Navigation'
 import CategoryManager from '../components/admin/CategoryManager'
 import UserManager from '../components/admin/UserManager'
@@ -49,6 +49,38 @@ interface Idea {
   status: 'pending' | 'approved' | 'rejected';
 }
 
+interface DashboardData {
+  totalIdeas: number;
+  totalUsers: number;
+  totalComments: number;
+  totalVotes: number;
+  ideaStatusCounts: {
+    [status: string]: number;
+  };
+  topCategories: Array<{ name: string; count: number }>;
+  recentTrends: {
+    newIdeasLastWeek: number;
+    newUsersLastWeek: number;
+    newCommentsLastWeek: number;
+    newVotesLastWeek: number;
+  };
+  weeklyData: Array<{
+    week: string;
+    ideas: number;
+    users: number;
+    comments: number;
+    votes: number;
+  }>;
+  topUsersByIdeas: Array<{ id: number; name: string; ideaCount: number }>;
+  topIdeasByVotes: Array<{ id: number; title: string; voteCount: number }>;
+  userEngagement: {
+    averageIdeasPerUser: number;
+    averageCommentsPerUser: number;
+    averageVotesPerUser: number;
+  };
+  ideaSuccessRate: number;
+}
+
 interface AdminPageProps {
   initialCategories: Category[]
   initialUsers: User[]
@@ -61,48 +93,28 @@ const AdminPage: React.FC<AdminPageProps> = ({ initialCategories, initialUsers, 
   const [users, setUsers] = useState<User[]>(initialUsers)
   const [ideas, setIdeas] = useState<Idea[]>(initialIdeas)
   const [isLoading, setIsLoading] = useState(false)
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
 
-  const dashboardData = useMemo(() => {
-    const totalIdeas = ideas.length;
-    const totalUsers = users.length;
-    const totalComments = ideas.reduce((sum, idea) => sum + idea.comments.length, 0);
-    
-    const ideaStatusCounts = ideas.reduce((counts, idea) => {
-      counts[idea.status]++;
-      return counts;
-    }, { pending: 0, approved: 0, rejected: 0 } as { pending: number; approved: number; rejected: number });
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch('/api/admin?type=dashboard')
+        if (response.ok) {
+          const data = await response.json()
+          setDashboardData(data)
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
 
-    const categoryCount = ideas.reduce((counts: Record<string, number>, idea) => {
-      const categoryName = idea.category.name;
-      counts[categoryName] = (counts[categoryName] || 0) + 1;
-      return counts;
-    }, {});
-
-    const topCategories = Object.entries(categoryCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, count]) => ({ name, count }));
-
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
-    const recentTrends = {
-      newIdeasLastWeek: ideas.filter(idea => new Date(idea.createdAt) > oneWeekAgo).length,
-      newUsersLastWeek: users.filter(user => new Date(user.createdAt) > oneWeekAgo).length,
-      newCommentsLastWeek: ideas.reduce((sum, idea) => 
-        sum + idea.comments.filter(comment => new Date(comment.createdAt) > oneWeekAgo).length, 0
-      ),
-    };
-
-    return {
-      totalIdeas,
-      totalUsers,
-      totalComments,
-      ideaStatusCounts,
-      topCategories,
-      recentTrends,
-    };
-  }, [ideas, users]);
+    if (activeTab === 'dashboard') {
+      fetchDashboardData()
+    }
+  }, [activeTab])
 
   const handleAddCategory = async (name: string) => {
     setIsLoading(true)
@@ -315,15 +327,8 @@ const AdminPage: React.FC<AdminPageProps> = ({ initialCategories, initialUsers, 
               </div>
             ) : (
               <>
-                {activeTab === 'dashboard' && (
-                  <Dashboard
-                    totalIdeas={dashboardData.totalIdeas}
-                    totalUsers={dashboardData.totalUsers}
-                    totalComments={dashboardData.totalComments}
-                    ideaStatusCounts={dashboardData.ideaStatusCounts}
-                    topCategories={dashboardData.topCategories}
-                    recentTrends={dashboardData.recentTrends}
-                  />
+                {activeTab === 'dashboard' && dashboardData && (
+                  <Dashboard {...dashboardData} />
                 )}
                 {activeTab === 'categories' && (
                   <CategoryManager
