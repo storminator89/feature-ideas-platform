@@ -1,12 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { getSession } from "next-auth/react"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "./auth/[...nextauth]"
 import { PrismaClient } from '@prisma/client'
 import { hash } from 'bcrypt'
 
 const prisma = new PrismaClient()
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSession({ req })
+  const session = await getServerSession(req, res, authOptions)
 
   if (!session || session.user.role !== 'ADMIN') {
     return res.status(403).json({ message: 'Forbidden' })
