@@ -13,10 +13,10 @@ interface Idea {
   category: {
     name: string;
   };
-  votes: any[];
+  votes: any[] | undefined;
   _count: {
     comments: number;
-  };
+  } | undefined;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
 }
@@ -161,11 +161,11 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ ideas: initialIdeas, onVote, 
                       className="text-blue-600 hover:text-blue-800 transition-colors duration-200 flex items-center"
                     >
                       <HandThumbUpIcon className="h-4 w-4" />
-                      <span className="text-xs ml-1">{idea.votes.length}</span>
+                      <span className="text-xs ml-1">{idea.votes?.length || 0}</span>
                     </button>
                     <button className="text-gray-600 hover:text-gray-800 transition-colors duration-200 flex items-center">
                       <ChatBubbleLeftEllipsisIcon className="h-4 w-4" />
-                      <span className="text-xs ml-1">{idea._count.comments}</span>
+                      <span className="text-xs ml-1">{idea._count?.comments || 0}</span>
                     </button>
                     {(session?.user?.email === idea.author.email || isAdmin) && (
                       <button
