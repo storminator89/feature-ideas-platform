@@ -1,6 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Session } from 'next-auth';
-import { HandThumbUpIcon, ChatBubbleLeftEllipsisIcon, TrashIcon, UserIcon, ClockIcon, EyeIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { HandThumbUpIcon, ChatBubbleLeftEllipsisIcon, TrashIcon, UserIcon, ClockIcon, XMarkIcon, PaperAirplaneIcon, CheckIcon, ExclamationTriangleIcon, ShareIcon } from '@heroicons/react/24/outline';
+
+interface Comment {
+  id: number;
+  content: string;
+  author: {
+    name: string;
+  };
+  createdAt: string;
+}
 
 interface Idea {
   id: number;
@@ -14,6 +23,7 @@ interface Idea {
     name: string;
   };
   votes: any[] | undefined;
+  comments: Comment[];
   _count: {
     comments: number;
   } | undefined;
@@ -26,21 +36,221 @@ interface KanbanBoardProps {
   onVote: (ideaId: number) => Promise<void>;
   onDelete: (ideaId: number) => Promise<void>;
   onUpdateStatus: (ideaId: number, newStatus: 'pending' | 'approved' | 'rejected') => Promise<void>;
+  onAddComment: (ideaId: number, content: string) => Promise<void>;
   session: Session | null;
+  viewMode: 'kanban' | 'list';
 }
 
 type ColumnType = 'pending' | 'approved' | 'rejected';
 
-const KanbanBoard: React.FC<KanbanBoardProps> = ({ ideas: initialIdeas, onVote, onDelete, onUpdateStatus, session }) => {
-  const [ideas, setIdeas] = useState<Idea[]>(initialIdeas);
-  const [expandedIdea, setExpandedIdea] = useState<number | null>(null);
+const Modal: React.FC<{ 
+  idea: Idea; 
+  onClose: () => void; 
+  formatDate: (date: string) => string; 
+  onVote: (ideaId: number) => Promise<void>; 
+  onDelete: (ideaId: number) => Promise<void>;
+  onAddComment: (ideaId: number, content: string) => Promise<void>;
+  onUpdateStatus: (ideaId: number, newStatus: 'pending' | 'approved' | 'rejected') => Promise<void>;
+  onShare: (idea: Idea) => void;
+  isAdmin: boolean; 
+  session: Session | null 
+}> = ({ 
+  idea, 
+  onClose, 
+  formatDate, 
+  onVote, 
+  onDelete,
+  onAddComment,
+  onUpdateStatus,
+  onShare,
+  isAdmin, 
+  session 
+}) => {
+  const [newComment, setNewComment] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleAddComment = async () => {
+    if (newComment.trim() && !isSubmitting) {
+      setIsSubmitting(true);
+      try {
+        await onAddComment(idea.id, newComment);
+        setNewComment('');
+      } catch (error) {
+        console.error('Failed to add comment:', error);
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const statusColors = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    approved: 'bg-green-100 text-green-800',
+    rejected: 'bg-red-100 text-red-800',
+  };
+
+  const statusIcons = {
+    pending: <ExclamationTriangleIcon className="h-5 w-5 mr-1" />,
+    approved: <CheckIcon className="h-5 w-5 mr-1" />,
+    rejected: <XMarkIcon className="h-5 w-5 mr-1" />,
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 overflow-y-auto h-full w-full z-50" onClick={onClose}>
+      <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white" onClick={e => e.stopPropagation()}>
+        <div className="mt-3">
+          <div className="flex justify-between items-start">
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">{idea.title}</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 transition-colors duration-200">
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+          </div>
+          <div className="mt-2">
+            <p className="text-md text-gray-600 whitespace-pre-wrap">{idea.description}</p>
+            <div className="flex flex-wrap items-center mt-4 space-x-4">
+              <span className="flex items-center text-sm text-gray-500">
+                <UserIcon className="h-4 w-4 mr-1" />
+                {idea.author.name}
+              </span>
+              <span className="flex items-center text-sm text-gray-500">
+                <ClockIcon className="h-4 w-4 mr-1" />
+                {formatDate(idea.createdAt)}
+              </span>
+              <span className={`flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusColors[idea.status]}`}>
+                {statusIcons[idea.status]}
+                {idea.status.charAt(0).toUpperCase() + idea.status.slice(1)}
+              </span>
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                {idea.category.name}
+              </span>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between">
+            <div className="flex space-x-4">
+              <button
+                onClick={() => onVote(idea.id)}
+                className="flex items-center text-blue-600 hover:text-blue-800 transition-colors duration-200"
+              >
+                <HandThumbUpIcon className="h-5 w-5 mr-1" />
+                <span>{idea.votes?.length || 0} Votes</span>
+              </button>
+              <button className="flex items-center text-gray-600 hover:text-gray-800 transition-colors duration-200">
+                <ChatBubbleLeftEllipsisIcon className="h-5 w-5 mr-1" />
+                <span>{idea._count?.comments || 0} Comments</span>
+              </button>
+              <button
+                onClick={() => onShare(idea)}
+                className="flex items-center text-green-600 hover:text-green-800 transition-colors duration-200"
+              >
+                <ShareIcon className="h-5 w-5 mr-1" />
+                <span>Share</span>
+              </button>
+            </div>
+            {(session?.user?.email === idea.author.email || isAdmin) && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to delete this idea?')) {
+                    onDelete(idea.id);
+                    onClose();
+                  }
+                }}
+                className="text-red-600 hover:text-red-800 transition-colors duration-200"
+              >
+                <TrashIcon className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+          {isAdmin && (
+            <div className="mt-4">
+              <h4 className="text-lg font-medium text-gray-900 mb-2">Update Status</h4>
+              <div className="flex space-x-2">
+                {['pending', 'approved', 'rejected'].map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => onUpdateStatus(idea.id, status as 'pending' | 'approved' | 'rejected')}
+                    className={`flex items-center px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${
+                      idea.status === status 
+                        ? statusColors[status] 
+                        : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                    }`}
+                  >
+                    {statusIcons[status as keyof typeof statusIcons]}
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="mt-6">
+            <h4 className="text-lg font-medium text-gray-900 mb-2">Comments</h4>
+            <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
+              {idea.comments && idea.comments.length > 0 ? (
+                idea.comments.map((comment) => (
+                  <div key={comment.id} className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">{comment.content}</p>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-500">{comment.author.name}</span>
+                      <span className="text-xs text-gray-500">{formatDate(comment.createdAt)}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500">No comments yet.</p>
+              )}
+            </div>
+            {session && (
+              <div className="mt-4">
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="w-full px-3 py-2 text-sm text-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                  rows={3}
+                />
+                <button
+                  onClick={handleAddComment}
+                  disabled={isSubmitting || !newComment.trim()}
+                  className={`mt-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 ${
+                    isSubmitting || !newComment.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Posting...
+                    </>
+                  ) : (
+                    <>
+                      <PaperAirplaneIcon className="h-5 w-5 mr-2" />
+                      Post Comment
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
+  ideas, 
+  onVote, 
+  onDelete, 
+  onUpdateStatus, 
+  onAddComment, 
+  session,
+  viewMode
+}) => {
   const [draggedIdea, setDraggedIdea] = useState<Idea | null>(null);
+  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
 
   const isAdmin = session?.user?.role === 'ADMIN';
-
-  useEffect(() => {
-    setIdeas(initialIdeas);
-  }, [initialIdeas]);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, idea: Idea) => {
     if (!isAdmin) return;
@@ -60,25 +270,9 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ ideas: initialIdeas, onVote, 
     e.preventDefault();
     if (!draggedIdea) return;
 
-    const updatedIdeas = ideas.map(idea =>
-      idea.id === draggedIdea.id ? { ...idea, status: newStatus } : idea
-    );
-
-    setIdeas(updatedIdeas);
-
-    try {
-      await onUpdateStatus(draggedIdea.id, newStatus);
-    } catch (error) {
-      console.error('Failed to update idea status:', error);
-      setIdeas(initialIdeas); // Revert to original state if API call fails
-    }
-
+    await onUpdateStatus(draggedIdea.id, newStatus);
     setDraggedIdea(null);
   };
-
-  const toggleExpand = useCallback((ideaId: number) => {
-    setExpandedIdea(prevId => prevId === ideaId ? null : ideaId);
-  }, []);
 
   const formatDate = useCallback((dateString: string) => {
     const date = new Date(dateString);
@@ -99,91 +293,131 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ ideas: initialIdeas, onVote, 
     }
   };
 
-  return (
-    <div className="flex h-full overflow-hidden">
-      {(Object.keys(columns) as ColumnType[]).map((status) => (
-        <div 
-          key={status} 
-          className="flex-1 min-w-0 p-4"
-          onDragOver={isAdmin ? handleDragOver : undefined}
-          onDrop={isAdmin ? (e) => handleDrop(e, status) : undefined}
-        >
-          <h3 className="text-xl font-semibold mb-4 capitalize">{status}</h3>
-          <div
-            className={`p-4 rounded-lg h-full border-2 overflow-y-auto ${getColumnStyle(status)}`}
-          >
-            {columns[status].map((idea) => (
-              <div
-                key={idea.id}
-                draggable={isAdmin}
-                onDragStart={isAdmin ? (e) => handleDragStart(e, idea) : undefined}
-                className={`bg-white p-4 mb-4 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 border border-gray-200 ${isAdmin ? 'cursor-move' : ''}`}
-              >
-                <h4 className="font-semibold text-gray-800 mb-2">{idea.title}</h4>
-                <p className={`text-sm text-gray-600 mb-3 ${expandedIdea === idea.id ? '' : 'line-clamp-2'}`}>
-                  {idea.description}
-                </p>
-                {idea.description.length > 100 && (
-                  <button
-                    onClick={() => toggleExpand(idea.id)}
-                    className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center mb-2"
-                  >
-                    {expandedIdea === idea.id ? (
-                      <>
-                        <XMarkIcon className="h-4 w-4 mr-1" />
-                        Show less
-                      </>
-                    ) : (
-                      <>
-                        <EyeIcon className="h-4 w-4 mr-1" />
-                        Read more
-                      </>
-                    )}
-                  </button>
-                )}
-                <div className="flex justify-between items-center text-xs text-gray-500 mb-2">
-                  <span className="flex items-center">
-                    <UserIcon className="h-3 w-3 mr-1" />
-                    {idea.author.name}
-                  </span>
-                  <span className="flex items-center">
-                    <ClockIcon className="h-3 w-3 mr-1" />
-                    {formatDate(idea.createdAt)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                    {idea.category.name}
-                  </span>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => onVote(idea.id)}
-                      className="text-blue-600 hover:text-blue-800 transition-colors duration-200 flex items-center"
-                    >
-                      <HandThumbUpIcon className="h-4 w-4" />
-                      <span className="text-xs ml-1">{idea.votes?.length || 0}</span>
-                    </button>
-                    <button className="text-gray-600 hover:text-gray-800 transition-colors duration-200 flex items-center">
-                      <ChatBubbleLeftEllipsisIcon className="h-4 w-4" />
-                      <span className="text-xs ml-1">{idea._count?.comments || 0}</span>
-                    </button>
-                    {(session?.user?.email === idea.author.email || isAdmin) && (
-                      <button
-                        onClick={() => onDelete(idea.id)}
-                        className="text-red-600 hover:text-red-800 transition-colors duration-200"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
+  const handleShare = async (idea: Idea) => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: idea.title,
+          text: idea.description,
+          url: `${window.location.origin}/ideas/${idea.id}`,
+        });
+        console.log('Idea shared successfully');
+      } catch (error) {
+        console.error('Error sharing idea:', error);
+      }
+    } else {
+      // Fallback for browsers that don't support the Web Share API
+      alert(`Share this idea:\n\nTitle: ${idea.title}\nDescription: ${idea.description}\nLink: ${window.location.origin}/ideas/${idea.id}`);
+    }
+  };
+
+  const renderIdea = (idea: Idea) => (
+    <div
+      key={idea.id}
+      onClick={() => setSelectedIdea(idea)}
+      className={`bg-white p-4 mb-4 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 border border-gray-200 cursor-pointer`}
+      >
+        <h4 className="font-semibold text-gray-800 mb-2">{idea.title}</h4>
+        <p className="text-sm text-gray-600 mb-3 line-clamp-2">{idea.description}</p>
+        <div className="flex justify-between items-center text-xs text-gray-500 mb-2">
+          <span className="flex items-center">
+            <UserIcon className="h-3 w-3 mr-1" />
+            {idea.author.name}
+          </span>
+          <span className="flex items-center">
+            <ClockIcon className="h-3 w-3 mr-1" />
+            {formatDate(idea.createdAt)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+            {idea.category.name}
+          </span>
+          <div className="flex space-x-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onVote(idea.id);
+              }}
+              className="text-blue-600 hover:text-blue-800 transition-colors duration-200 flex items-center"
+            >
+              <HandThumbUpIcon className="h-4 w-4" />
+              <span className="text-xs ml-1">{idea.votes?.length || 0}</span>
+            </button>
+            <button 
+              className="text-gray-600 hover:text-gray-800 transition-colors duration-200 flex items-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ChatBubbleLeftEllipsisIcon className="h-4 w-4" />
+              <span className="text-xs ml-1">{idea._count?.comments || 0}</span>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShare(idea);
+              }}
+              className="text-green-600 hover:text-green-800 transition-colors duration-200 flex items-center"
+            >
+              <ShareIcon className="h-4 w-4" />
+            </button>
           </div>
         </div>
-      ))}
-    </div>
-  );
-};
-
-export default React.memo(KanbanBoard);
+      </div>
+    );
+  
+    const renderKanbanView = () => (
+      <div className="flex h-full overflow-hidden">
+        {(Object.keys(columns) as ColumnType[]).map((status) => (
+          <div 
+            key={status} 
+            className="flex-1 min-w-0 p-4"
+            onDragOver={isAdmin ? handleDragOver : undefined}
+            onDrop={isAdmin ? (e) => handleDrop(e, status) : undefined}
+          >
+            <h3 className="text-xl font-semibold mb-4 capitalize">{status}</h3>
+            <div
+              className={`p-4 rounded-lg h-full border-2 overflow-y-auto ${getColumnStyle(status)}`}
+            >
+              {columns[status].map((idea) => (
+                <div
+                  key={idea.id}
+                  draggable={isAdmin}
+                  onDragStart={isAdmin ? (e) => handleDragStart(e, idea) : undefined}
+                >
+                  {renderIdea(idea)}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  
+    const renderListView = () => (
+      <div className="space-y-4">
+        {ideas.map((idea) => renderIdea(idea))}
+      </div>
+    );
+  
+    return (
+      <div>
+        {viewMode === 'kanban' ? renderKanbanView() : renderListView()}
+        {selectedIdea && (
+          <Modal 
+            idea={selectedIdea} 
+            onClose={() => setSelectedIdea(null)} 
+            formatDate={formatDate}
+            onVote={onVote}
+            onDelete={onDelete}
+            onAddComment={onAddComment}
+            onUpdateStatus={onUpdateStatus}
+            onShare={handleShare}
+            isAdmin={isAdmin}
+            session={session}
+          />
+        )}
+      </div>
+    );
+  };
+  
+  export default React.memo(KanbanBoard);

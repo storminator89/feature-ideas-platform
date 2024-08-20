@@ -4,18 +4,24 @@ import { useState, useEffect } from 'react'
 import { useSession, getSession } from 'next-auth/react'
 import prisma from '../lib/prisma'
 import { Category } from '@prisma/client'
-import IdeaList from '../components/IdeaList'
 import IdeaSubmissionForm from '../components/IdeaSubmissionForm'
-import { FunnelIcon, MagnifyingGlassIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { FunnelIcon, MagnifyingGlassIcon, PlusIcon, Squares2X2Icon, ListBulletIcon } from '@heroicons/react/24/outline'
 import Navigation from '../components/Navigation'
 import KanbanBoard from '../components/KanbanBoard'
+
+interface Comment {
+  id: number;
+  content: string;
+  author: {
+    name: string;
+  };
+  createdAt: string;
+}
 
 interface Idea {
   id: number;
   title: string;
   description: string;
-  createdAt: string;
-  updatedAt: string;
   author: {
     id: number;
     name: string;
@@ -30,10 +36,13 @@ interface Idea {
     userId: number;
     createdAt: string;
   }[];
+  comments: Comment[];
   _count: {
     comments: number;
   };
   status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface HomeProps {
@@ -49,7 +58,7 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
   const [sortBy, setSortBy] = useState<'newest' | 'mostVotes'>('newest');
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredIdeas, setFilteredIdeas] = useState<Idea[]>(initialIdeas);
-  const [activeTab, setActiveTab] = useState<'list' | 'kanban'>('list');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
 
   useEffect(() => {
     const filtered = ideas
@@ -164,25 +173,59 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
     }
   }
 
-  const handleUpdateIdeaStatus = async (ideaId: number, newStatus: 'pending' | 'approved' | 'rejected') => {
+  const handleUpdateStatus = async (ideaId: number, newStatus: 'pending' | 'approved' | 'rejected') => {
     try {
       const response = await fetch(`/api/ideas/${ideaId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ status: newStatus }),
-      })
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to update idea status')
+        throw new Error('Failed to update idea status');
       }
 
-      const updatedIdea = await response.json()
-      setIdeas(prevIdeas => prevIdeas.map(idea => idea.id === updatedIdea.id ? updatedIdea : idea))
+      const updatedIdea = await response.json();
+      setIdeas(prevIdeas => prevIdeas.map(idea =>
+        idea.id === updatedIdea.id ? updatedIdea : idea
+      ));
     } catch (error) {
-      console.error('Error updating idea status:', error)
-      alert('Failed to update idea status. Please try again.')
+      console.error('Error updating idea status:', error);
+      alert('Failed to update idea status. Please try again.');
     }
-  }
+  };
+
+  const handleAddComment = async (ideaId: number, content: string) => {
+    try {
+      const response = await fetch(`/api/ideas/${ideaId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add comment');
+      }
+
+      const newComment = await response.json();
+      setIdeas(prevIdeas => prevIdeas.map(idea =>
+        idea.id === ideaId
+          ? {
+            ...idea,
+            comments: [...(idea.comments || []), newComment],
+            _count: { ...idea._count, comments: (idea._count?.comments || 0) + 1 }
+          }
+          : idea
+      ));
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      alert('Failed to add comment. Please try again.');
+    }
+  };
 
   if (status === "loading") {
     return (
@@ -296,46 +339,34 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
                   <h2 className="text-xl font-semibold text-gray-900">Current Ideas</h2>
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => setActiveTab('list')}
-                      className={`px-4 py-2 rounded-md ${
-                        activeTab === 'list'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
+                      onClick={() => setViewMode('kanban')}
+                      className={`px-3 py-1 rounded-md flex items-center ${viewMode === 'kanban' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
+                        }`}
                     >
-                      List View
+                      <Squares2X2Icon className="h-5 w-5 mr-1" />
+                      <span>Kanban</span>
                     </button>
                     <button
-                      onClick={() => setActiveTab('kanban')}
-                      className={`px-4 py-2 rounded-md ${
-                        activeTab === 'kanban'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
+                      onClick={() => setViewMode('list')}
+                      className={`px-3 py-1 rounded-md flex items-center ${viewMode === 'list' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
+                        }`}
                     >
-                      Kanban View
+                      <ListBulletIcon className="h-5 w-5 mr-1" />
+                      <span>List</span>
                     </button>
                   </div>
                 </div>
-                {activeTab === 'list' ? (
-                  <IdeaList
+                <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
+                  <KanbanBoard
                     ideas={filteredIdeas}
                     onVote={handleVote}
                     onDelete={handleDeleteIdea}
+                    onUpdateStatus={handleUpdateStatus}
+                    onAddComment={handleAddComment}
                     session={session}
-                    onUpdateStatus={handleUpdateIdeaStatus}
+                    viewMode={viewMode}
                   />
-                ) : (
-                  <div className="h-[calc(100vh-200px)]">
-                    <KanbanBoard
-                      ideas={filteredIdeas}
-                      onVote={handleVote}
-                      onDelete={handleDeleteIdea}
-                      onUpdateStatus={handleUpdateIdeaStatus}
-                      session={session}
-                    />
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
@@ -365,6 +396,13 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           }
         },
         votes: true,
+        comments: {
+          include: {
+            user: {
+              select: { name: true }
+            }
+          }
+        },
         _count: {
           select: { comments: true }
         }
@@ -376,23 +414,27 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
   const safeIdeas = ideas.map(idea => ({
     ...idea,
-    author: {
-      ...idea.author,
-      name: idea.author.name || 'Anonymous'
-    },
     createdAt: idea.createdAt.toISOString(),
     updatedAt: idea.updatedAt.toISOString(),
     votes: idea.votes.map(vote => ({
       ...vote,
       createdAt: vote.createdAt.toISOString()
+    })),
+    comments: idea.comments.map(comment => ({
+      id: comment.id,
+      content: comment.content,
+      createdAt: comment.createdAt.toISOString(),
+      author: {
+        name: comment.user.name
+      }
     }))
   }))
 
   return {
     props: {
-      session: session ? JSON.parse(JSON.stringify(session)) : null,
-      initialIdeas: JSON.parse(JSON.stringify(safeIdeas)),
-      categories: JSON.parse(JSON.stringify(categories)),
+      initialIdeas: safeIdeas,
+      categories: categories,
+      session: session
     },
   }
 }
