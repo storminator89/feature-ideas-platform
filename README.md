@@ -9,10 +9,14 @@ A dynamic web application for submitting, voting on, and managing feature ideas.
 - Voting system
 - Idea filtering and sorting
 - Responsive design
+- Kanban board or List view
+- Drag and Drop in Kanban board to change status
 
 # Screenshots
 ![Main Page](/public/mainInterface.png)
 ![Admin Dashboard](/public/admindashboard.png)
+![Kanban](/public/kanban.png)
+
 
 ## 🛠 Tech Stack
 
