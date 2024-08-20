@@ -37,7 +37,7 @@ A dynamic web application for submitting, voting on, and managing feature ideas.
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/feature-ideas-platform.git
+   git clone https://github.com/storminator89/feature-ideas-platform.git
    ```
 
 2. Install dependencies:
