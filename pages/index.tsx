@@ -1,13 +1,14 @@
 import { GetServerSideProps, NextPage } from 'next'
 import Head from 'next/head'
 import { useState, useEffect } from 'react'
-import { useSession, signIn, signOut, getSession } from 'next-auth/react'
+import { useSession, getSession } from 'next-auth/react'
 import prisma from '../lib/prisma'
 import { Category } from '@prisma/client'
 import IdeaList from '../components/IdeaList'
 import IdeaSubmissionForm from '../components/IdeaSubmissionForm'
 import { FunnelIcon, MagnifyingGlassIcon, PlusIcon } from '@heroicons/react/24/outline'
 import Navigation from '../components/Navigation'
+import KanbanBoard from '../components/KanbanBoard'
 
 interface Idea {
   id: number;
@@ -32,6 +33,7 @@ interface Idea {
   _count: {
     comments: number;
   };
+  status: 'pending' | 'approved' | 'rejected';
 }
 
 interface HomeProps {
@@ -47,6 +49,7 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
   const [sortBy, setSortBy] = useState<'newest' | 'mostVotes'>('newest');
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredIdeas, setFilteredIdeas] = useState<Idea[]>(initialIdeas);
+  const [activeTab, setActiveTab] = useState<'list' | 'kanban'>('list');
 
   useEffect(() => {
     const filtered = ideas
@@ -161,6 +164,26 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
     }
   }
 
+  const handleUpdateIdeaStatus = async (ideaId: number, newStatus: 'pending' | 'approved' | 'rejected') => {
+    try {
+      const response = await fetch(`/api/ideas/${ideaId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update idea status')
+      }
+
+      const updatedIdea = await response.json()
+      setIdeas(prevIdeas => prevIdeas.map(idea => idea.id === updatedIdea.id ? updatedIdea : idea))
+    } catch (error) {
+      console.error('Error updating idea status:', error)
+      alert('Failed to update idea status. Please try again.')
+    }
+  }
+
   if (status === "loading") {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -269,13 +292,50 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
 
             <div className="bg-white shadow-md rounded-lg overflow-hidden">
               <div className="px-6 py-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">Current Ideas</h2>
-                <IdeaList
-                  ideas={filteredIdeas}
-                  onVote={handleVote}
-                  onDelete={handleDeleteIdea}
-                  session={session}               
-                />
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Current Ideas</h2>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setActiveTab('list')}
+                      className={`px-4 py-2 rounded-md ${
+                        activeTab === 'list'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      List View
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('kanban')}
+                      className={`px-4 py-2 rounded-md ${
+                        activeTab === 'kanban'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Kanban View
+                    </button>
+                  </div>
+                </div>
+                {activeTab === 'list' ? (
+                  <IdeaList
+                    ideas={filteredIdeas}
+                    onVote={handleVote}
+                    onDelete={handleDeleteIdea}
+                    session={session}
+                    onUpdateStatus={handleUpdateIdeaStatus}
+                  />
+                ) : (
+                  <div className="h-[calc(100vh-200px)]">
+                    <KanbanBoard
+                      ideas={filteredIdeas}
+                      onVote={handleVote}
+                      onDelete={handleDeleteIdea}
+                      onUpdateStatus={handleUpdateIdeaStatus}
+                      session={session}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -287,7 +347,6 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = await getSession(context)
-  const serverTime = new Date().toISOString()
 
   const [ideas, categories] = await Promise.all([
     prisma.idea.findMany({

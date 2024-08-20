@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Session } from 'next-auth';
 import { HandThumbUpIcon, ClockIcon, UserIcon, ChatBubbleLeftEllipsisIcon, ShareIcon, TrashIcon, EyeIcon } from '@heroicons/react/24/outline';
 import CommentSection from './CommentSection';
@@ -19,11 +19,12 @@ interface Idea {
   votes: {
     id: number;
     userId: number;
-  }[] | undefined;
+  }[];
   createdAt: string;
   _count?: {
     comments?: number;
   };
+  status: 'pending' | 'approved' | 'rejected';
 }
 
 interface IdeaListProps {
@@ -31,15 +32,16 @@ interface IdeaListProps {
   onVote: (ideaId: number) => Promise<void>;
   onDelete: (ideaId: number) => Promise<void>;
   session: Session | null;
+  onUpdateStatus: (ideaId: number, newStatus: 'pending' | 'approved' | 'rejected') => Promise<void>;
 }
 
-const IdeaList: React.FC<IdeaListProps> = ({ ideas, onVote, onDelete, session }) => {
+const IdeaList: React.FC<IdeaListProps> = ({ ideas, onVote, onDelete, session, onUpdateStatus }) => {
   const [expandedIdeas, setExpandedIdeas] = useState<number[]>([]);
   const [showComments, setShowComments] = useState<number | null>(null);
   const [commentCounts, setCommentCounts] = useState<{[key: number]: number}>({});
   const [formattedDates, setFormattedDates] = useState<{[key: number]: string}>({});
 
-  useEffect(() => {
+  React.useEffect(() => {
     const newFormattedDates = ideas.reduce((acc, idea) => {
       acc[idea.id] = formatDate(idea.createdAt);
       return acc;
@@ -85,6 +87,14 @@ const IdeaList: React.FC<IdeaListProps> = ({ ideas, onVote, onDelete, session })
     setCommentCounts(prev => ({...prev, [ideaId]: count}));
   };
 
+  const getStatusColor = (status: 'pending' | 'approved' | 'rejected') => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'approved': return 'bg-green-100 text-green-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {ideas.map((idea) => (
@@ -94,9 +104,14 @@ const IdeaList: React.FC<IdeaListProps> = ({ ideas, onVote, onDelete, session })
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
                 {idea.category.name}
               </span>
-              <div className="flex items-center text-gray-500 text-xs">
-                <ClockIcon className="h-4 w-4 mr-1" />
-                <span suppressHydrationWarning>{formattedDates[idea.id] || formatDate(idea.createdAt)}</span>
+              <div className="flex items-center space-x-2">
+                <div className="text-gray-500 text-xs flex items-center">
+                  <ClockIcon className="h-4 w-4 mr-1" />
+                  <span suppressHydrationWarning>{formattedDates[idea.id] || formatDate(idea.createdAt)}</span>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(idea.status)}`}>
+                  {idea.status.charAt(0).toUpperCase() + idea.status.slice(1)}
+                </span>
               </div>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">{idea.title}</h3>
@@ -169,6 +184,37 @@ const IdeaList: React.FC<IdeaListProps> = ({ ideas, onVote, onDelete, session })
                 ideaId={idea.id} 
                 onCommentCountChange={(count) => handleCommentCountChange(idea.id, count)}
               />
+            </div>
+          )}
+          {session && session.user.role === 'ADMIN' && (
+            <div className="px-6 py-4 bg-gray-100 border-t border-gray-200">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Update Status:</h4>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => onUpdateStatus(idea.id, 'pending')}
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    idea.status === 'pending' ? 'bg-yellow-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                  }`}
+                >
+                  Pending
+                </button>
+                <button
+                  onClick={() => onUpdateStatus(idea.id, 'approved')}
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    idea.status === 'approved' ? 'bg-green-500 text-white' : 'bg-green-100 text-green-800 hover:bg-green-200'
+                  }`}
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => onUpdateStatus(idea.id, 'rejected')}
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    idea.status === 'rejected' ? 'bg-red-500 text-white' : 'bg-red-100 text-red-800 hover:bg-red-200'
+                  }`}
+                >
+                  Reject
+                </button>
+              </div>
             </div>
           )}
         </div>
