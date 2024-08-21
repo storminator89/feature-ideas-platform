@@ -301,6 +301,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
   const [votedIdeas, setVotedIdeas] = useState<number[]>([]);
   const [showConfirmation, setShowConfirmation] = useState<number | null>(null);
+  const [activeColumn, setActiveColumn] = useState<ColumnType>('pending');
 
   const isAdmin = session?.user?.role === 'ADMIN';
 
@@ -461,7 +462,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
 
   const renderKanbanView = () => (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col md:flex-row h-full overflow-hidden">
       {(Object.keys(columns) as ColumnType[]).map((status) => (
         <div 
           key={status} 
@@ -494,9 +495,49 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
     </div>
   );
 
+  const renderMobileKanbanView = () => (
+    <div className="flex flex-col h-full">
+      <div className="flex mb-4 overflow-x-auto">
+        {(Object.keys(columns) as ColumnType[]).map((status) => (
+          <button
+            key={status}
+            onClick={() => setActiveColumn(status)}
+            className={`px-4 py-2 mr-2 rounded-full text-sm font-medium ${
+              activeColumn === status
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 text-gray-800'
+            }`}
+          >
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </button>
+        ))}
+      </div>
+      <div
+        className={`p-4 rounded-lg h-full border-2 overflow-y-auto ${getColumnStyle(activeColumn)}`}
+      >
+        {columns[activeColumn].map((idea) => (
+          <div
+            key={idea.id}
+            draggable={isAdmin}
+            onDragStart={isAdmin ? (e) => handleDragStart(e, idea) : undefined}
+          >
+            {renderIdea(idea)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div>
-      {viewMode === 'kanban' ? renderKanbanView() : renderListView()}
+      {viewMode === 'kanban' ? (
+        <div className="hidden md:block">{renderKanbanView()}</div>
+      ) : (
+        renderListView()
+      )}
+      <div className="md:hidden">
+        {viewMode === 'kanban' ? renderMobileKanbanView() : renderListView()}
+      </div>
       {selectedIdea && (
         <Modal 
           idea={selectedIdea} 
