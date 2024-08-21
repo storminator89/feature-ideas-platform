@@ -1,6 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Session } from 'next-auth';
 import { HandThumbUpIcon, ChatBubbleLeftEllipsisIcon, TrashIcon, UserIcon, ClockIcon, XMarkIcon, PaperAirplaneIcon, CheckIcon, ExclamationTriangleIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Comment {
   id: number;
@@ -43,6 +44,41 @@ interface KanbanBoardProps {
 
 type ColumnType = 'pending' | 'approved' | 'rejected';
 
+const ConfirmationModal: React.FC<{
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({ onConfirm, onCancel }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white rounded-lg p-6 max-w-sm mx-auto"
+      >
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Remove Vote</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          You've already voted for this idea. Do you want to remove your vote?
+        </p>
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors duration-200"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200"
+          >
+            Remove Vote
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const Modal: React.FC<{ 
   idea: Idea; 
   onClose: () => void; 
@@ -53,7 +89,9 @@ const Modal: React.FC<{
   onUpdateStatus: (ideaId: number, newStatus: 'pending' | 'approved' | 'rejected') => Promise<void>;
   onShare: (idea: Idea) => void;
   isAdmin: boolean; 
-  session: Session | null 
+  session: Session | null;
+  hasVoted: boolean;
+  showVoteConfirmation: (ideaId: number) => void;
 }> = ({ 
   idea, 
   onClose, 
@@ -64,7 +102,9 @@ const Modal: React.FC<{
   onUpdateStatus,
   onShare,
   isAdmin, 
-  session 
+  session,
+  hasVoted,
+  showVoteConfirmation
 }) => {
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -80,6 +120,14 @@ const Modal: React.FC<{
       } finally {
         setIsSubmitting(false);
       }
+    }
+  };
+
+  const handleVote = () => {
+    if (hasVoted) {
+      showVoteConfirmation(idea.id);
+    } else {
+      onVote(idea.id);
     }
   };
 
@@ -128,11 +176,13 @@ const Modal: React.FC<{
           <div className="mt-4 flex items-center justify-between">
             <div className="flex space-x-4">
               <button
-                onClick={() => onVote(idea.id)}
-                className="flex items-center text-blue-600 hover:text-blue-800 transition-colors duration-200"
+                onClick={handleVote}
+                className={`flex items-center px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${
+                  hasVoted ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                }`}
               >
                 <HandThumbUpIcon className="h-5 w-5 mr-1" />
-                <span>{idea.votes?.length || 0} Votes</span>
+                <span>{idea.votes?.length || 0} {hasVoted ? 'Voted' : 'Vote'}</span>
               </button>
               <button className="flex items-center text-gray-600 hover:text-gray-800 transition-colors duration-200">
                 <ChatBubbleLeftEllipsisIcon className="h-5 w-5 mr-1" />
@@ -249,8 +299,17 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
 }) => {
   const [draggedIdea, setDraggedIdea] = useState<Idea | null>(null);
   const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
+  const [votedIdeas, setVotedIdeas] = useState<number[]>([]);
+  const [showConfirmation, setShowConfirmation] = useState<number | null>(null);
 
   const isAdmin = session?.user?.role === 'ADMIN';
+
+  useEffect(() => {
+    const storedVotedIdeas = localStorage.getItem('votedIdeas');
+    if (storedVotedIdeas) {
+      setVotedIdeas(JSON.parse(storedVotedIdeas));
+    }
+  }, []);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, idea: Idea) => {
     if (!isAdmin) return;
@@ -306,18 +365,68 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
         console.error('Error sharing idea:', error);
       }
     } else {
-      // Fallback for browsers that don't support the Web Share API
       alert(`Share this idea:\n\nTitle: ${idea.title}\nDescription: ${idea.description}\nLink: ${window.location.origin}/ideas/${idea.id}`);
     }
   };
 
-  const renderIdea = (idea: Idea) => (
-    <div
-      key={idea.id}
-      onClick={() => setSelectedIdea(idea)}
-      className={`bg-white p-4 mb-4 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 border border-gray-200 cursor-pointer`}
+  const handleVote = async (ideaId: number) => {
+    if (votedIdeas.includes(ideaId)) {
+      setShowConfirmation(ideaId);
+    } else {
+      await onVote(ideaId);
+      setVotedIdeas(prev => {
+        const newVotedIdeas = [...prev, ideaId];
+        localStorage.setItem('votedIdeas', JSON.stringify(newVotedIdeas));
+        return newVotedIdeas;
+      });
+    }
+  };
+
+  const handleConfirmUnvote = async (ideaId: number) => {
+    await onVote(ideaId);
+    setVotedIdeas(prev => {
+      const newVotedIdeas = prev.filter(id => id !== ideaId);
+      localStorage.setItem('votedIdeas', JSON.stringify(newVotedIdeas));
+      return newVotedIdeas;
+    });
+    setShowConfirmation(null);
+  };
+
+  const showVoteConfirmation = (ideaId: number) => {
+    setShowConfirmation(ideaId);
+  };
+
+  const renderIdea = (idea: Idea) => {
+    const hasVoted = votedIdeas.includes(idea.id);
+
+    return (
+      <div
+        key={idea.id}
+        onClick={() => setSelectedIdea(idea)}
+        className={`bg-white p-4 mb-4 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 border border-gray-200 cursor-pointer relative`}
       >
-        <h4 className="font-semibold text-gray-800 mb-2">{idea.title}</h4>
+        <span className="absolute top-2 left-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+          {idea.category.name}
+        </span>
+        <motion.button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (hasVoted) {
+              showVoteConfirmation(idea.id);
+            } else {
+              handleVote(idea.id);
+            }
+          }}
+          className={`absolute top-2 right-2 flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${
+            hasVoted ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800'
+          } hover:bg-blue-500 hover:text-white`}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <HandThumbUpIcon className="h-4 w-4 mr-1" />
+          <span>{idea.votes?.length || 0}</span>
+        </motion.button>
+        <h4 className="font-semibold text-gray-800 mb-2 mt-8">{idea.title}</h4>
         <p className="text-sm text-gray-600 mb-3 line-clamp-2">{idea.description}</p>
         <div className="flex justify-between items-center text-xs text-gray-500 mb-2">
           <span className="flex items-center">
@@ -330,94 +439,90 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </span>
         </div>
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-            {idea.category.name}
-          </span>
-          <div className="flex space-x-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onVote(idea.id);
-              }}
-              className="text-blue-600 hover:text-blue-800 transition-colors duration-200 flex items-center"
-            >
-              <HandThumbUpIcon className="h-4 w-4" />
-              <span className="text-xs ml-1">{idea.votes?.length || 0}</span>
-            </button>
-            <button 
-              className="text-gray-600 hover:text-gray-800 transition-colors duration-200 flex items-center"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ChatBubbleLeftEllipsisIcon className="h-4 w-4" />
-              <span className="text-xs ml-1">{idea._count?.comments || 0}</span>
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleShare(idea);
-              }}
-              className="text-green-600 hover:text-green-800 transition-colors duration-200 flex items-center"
-            >
-              <ShareIcon className="h-4 w-4" />
-            </button>
-          </div>
+          <button 
+            className="text-gray-600 hover:text-gray-800 transition-colors duration-200 flex items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ChatBubbleLeftEllipsisIcon className="h-4 w-4" />
+            <span className="text-xs ml-1">{idea._count?.comments || 0}</span>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleShare(idea);
+            }}
+            className="text-green-600 hover:text-green-800 transition-colors duration-200 flex items-center"
+          >
+            <ShareIcon className="h-4 w-4" />
+          </button>
         </div>
       </div>
     );
-  
-    const renderKanbanView = () => (
-      <div className="flex h-full overflow-hidden">
-        {(Object.keys(columns) as ColumnType[]).map((status) => (
-          <div 
-            key={status} 
-            className="flex-1 min-w-0 p-4"
-            onDragOver={isAdmin ? handleDragOver : undefined}
-            onDrop={isAdmin ? (e) => handleDrop(e, status) : undefined}
+  };
+
+  const renderKanbanView = () => (
+    <div className="flex h-full overflow-hidden">
+      {(Object.keys(columns) as ColumnType[]).map((status) => (
+        <div 
+          key={status} 
+          className="flex-1 min-w-0 p-4"
+          onDragOver={isAdmin ? handleDragOver : undefined}
+          onDrop={isAdmin ? (e) => handleDrop(e, status) : undefined}
+        >
+          <h3 className="text-xl font-semibold mb-4 capitalize">{status}</h3>
+          <div
+            className={`p-4 rounded-lg h-full border-2 overflow-y-auto ${getColumnStyle(status)}`}
           >
-            <h3 className="text-xl font-semibold mb-4 capitalize">{status}</h3>
-            <div
-              className={`p-4 rounded-lg h-full border-2 overflow-y-auto ${getColumnStyle(status)}`}
-            >
-              {columns[status].map((idea) => (
-                <div
-                  key={idea.id}
-                  draggable={isAdmin}
-                  onDragStart={isAdmin ? (e) => handleDragStart(e, idea) : undefined}
-                >
-                  {renderIdea(idea)}
-                </div>
-              ))}
-            </div>
+            {columns[status].map((idea) => (
+              <div
+                key={idea.id}
+                draggable={isAdmin}
+                onDragStart={isAdmin ? (e) => handleDragStart(e, idea) : undefined}
+              >
+                {renderIdea(idea)}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    );
-  
-    const renderListView = () => (
-      <div className="space-y-4">
-        {ideas.map((idea) => renderIdea(idea))}
-      </div>
-    );
-  
-    return (
-      <div>
-        {viewMode === 'kanban' ? renderKanbanView() : renderListView()}
-        {selectedIdea && (
-          <Modal 
-            idea={selectedIdea} 
-            onClose={() => setSelectedIdea(null)} 
-            formatDate={formatDate}
-            onVote={onVote}
-            onDelete={onDelete}
-            onAddComment={onAddComment}
-            onUpdateStatus={onUpdateStatus}
-            onShare={handleShare}
-            isAdmin={isAdmin}
-            session={session}
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderListView = () => (
+    <div className="space-y-4">
+      {ideas.map((idea) => renderIdea(idea))}
+    </div>
+  );
+
+  return (
+    <div>
+      {viewMode === 'kanban' ? renderKanbanView() : renderListView()}
+      {selectedIdea && (
+        <Modal 
+          idea={selectedIdea} 
+          onClose={() => setSelectedIdea(null)} 
+          formatDate={formatDate}
+          onVote={handleVote}
+          onDelete={onDelete}
+          onAddComment={onAddComment}
+          onUpdateStatus={onUpdateStatus}
+          onShare={handleShare}
+          isAdmin={isAdmin}
+          session={session}
+          hasVoted={votedIdeas.includes(selectedIdea.id)}
+          showVoteConfirmation={showVoteConfirmation}
+        />
+      )}
+      <AnimatePresence>
+        {showConfirmation !== null && (
+          <ConfirmationModal
+            onConfirm={() => handleConfirmUnvote(showConfirmation)}
+            onCancel={() => setShowConfirmation(null)}
           />
         )}
-      </div>
-    );
-  };
-  
-  export default React.memo(KanbanBoard);
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default React.memo(KanbanBoard);

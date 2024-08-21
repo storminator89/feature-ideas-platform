@@ -59,13 +59,17 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredIdeas, setFilteredIdeas] = useState<Idea[]>(initialIdeas);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [filterMyIdeas, setFilterMyIdeas] = useState(false);
+  const [filterVotedIdeas, setFilterVotedIdeas] = useState(false);
 
   useEffect(() => {
     const filtered = ideas
       .filter(idea =>
         (selectedCategory === null || idea.category.id === selectedCategory) &&
         (idea.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          idea.description.toLowerCase().includes(searchTerm.toLowerCase()))
+          idea.description.toLowerCase().includes(searchTerm.toLowerCase())) &&
+        (!filterMyIdeas || (session && idea.author.id === parseInt(session.user.id as string))) &&
+        (!filterVotedIdeas || (session && idea.votes.some(vote => vote.userId === parseInt(session.user.id as string))))
       )
       .sort((a, b) => {
         if (sortBy === 'newest') {
@@ -75,7 +79,7 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
         }
       });
     setFilteredIdeas(filtered);
-  }, [ideas, selectedCategory, sortBy, searchTerm]);
+  }, [ideas, selectedCategory, sortBy, searchTerm, filterMyIdeas, filterVotedIdeas, session]);
 
   const handleSubmitIdea = async (newIdea: { title: string; description: string; categoryId: number }) => {
     if (!session) {
@@ -302,6 +306,36 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
                       <option value="mostVotes">Most Votes</option>
                     </select>
                   </div>
+                  {session && (
+                    <>
+                      <div className="flex items-center">
+                        <input
+                          id="filterMyIdeas"
+                          name="filterMyIdeas"
+                          type="checkbox"
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          checked={filterMyIdeas}
+                          onChange={(e) => setFilterMyIdeas(e.target.checked)}
+                        />
+                        <label htmlFor="filterMyIdeas" className="ml-2 block text-sm text-gray-900">
+                          My Ideas
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          id="filterVotedIdeas"
+                          name="filterVotedIdeas"
+                          type="checkbox"
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          checked={filterVotedIdeas}
+                          onChange={(e) => setFilterVotedIdeas(e.target.checked)}
+                        />
+                        <label htmlFor="filterVotedIdeas" className="ml-2 block text-sm text-gray-900">
+                          Ideas I Voted For
+                        </label>
+                      </div>
+                    </>
+                  )}
                 </div>
                 {session && (
                   <div className="mt-6">
@@ -328,7 +362,7 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
                       onSubmit={handleSubmitIdea}
                       onCancel={() => setShowSubmissionForm(false)}
                     />
-                  </div>
+                                      </div>
                 </div>
               </div>
             )}

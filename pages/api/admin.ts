@@ -204,9 +204,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       case 'user':
         try {
+          const { password, ...otherData } = data
+          let updateData = { ...otherData }
+          if (password) {
+            const hashedPassword = await hash(password, 10)
+            updateData.password = hashedPassword
+          }
           const updatedUser = await prisma.user.update({
             where: { id: Number(id) },
-            data
+            data: updateData,
+            select: { id: true, name: true, email: true, role: true }
           })
           return res.status(200).json(updatedUser)
         } catch (error: unknown) {
@@ -255,11 +262,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       case 'user':
         try {
-          await prisma.user.delete({ where: { id: Number(id) } })
-          return res.status(200).json({ message: 'User deleted' })
+          await prisma.$transaction(async (prisma) => {
+            // Löschen aller Votes des Benutzers
+            await prisma.vote.deleteMany({
+              where: { userId: Number(id) },
+            });
+
+            // Löschen aller Kommentare des Benutzers
+            await prisma.comment.deleteMany({
+              where: { userId: Number(id) },
+            });
+
+            // Finden oder Erstellen eines "anonymous" Benutzers
+            let anonymousUser = await prisma.user.findUnique({
+              where: { email: 'anonymous@example.com' },
+            });
+
+            if (!anonymousUser) {
+              anonymousUser = await prisma.user.create({
+                data: {
+                  email: 'anonymous@example.com',
+                  name: 'Anonymous',
+                  password: await hash('anonymousPassword', 10),
+                  role: 'USER',
+                },
+              });
+            }
+
+            // Aktualisieren aller Ideen des Benutzers auf den "anonymous" Benutzer
+            await prisma.idea.updateMany({
+              where: { authorId: Number(id) },
+              data: { authorId: anonymousUser.id },
+            });
+
+            // Schließlich den Benutzer löschen
+            await prisma.user.delete({
+              where: { id: Number(id) },
+            });
+          });
+
+          return res.status(200).json({ message: 'User deleted and associated data anonymized' });
         } catch (error: unknown) {
-          console.error('Error deleting user:', error)
-          return res.status(500).json({ message: 'Error deleting user', error: error instanceof Error ? error.message : 'Unknown error' })
+          console.error('Error deleting user:', error);
+          return res.status(500).json({ message: 'Error deleting user', error: error instanceof Error ? error.message : 'Unknown error' });
         }
       case 'idea':
         try {
