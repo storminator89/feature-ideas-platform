@@ -1,6 +1,8 @@
+// components/IdeaSubmissionForm.tsx
 import React, { useState } from 'react'
 import { Category } from '@prisma/client'
-import { LightBulbIcon, PencilIcon, FolderIcon } from '@heroicons/react/24/outline'
+import TiptapEditor from './TiptapEditor'
+import { ChevronDownIcon } from '@heroicons/react/20/solid'
 
 interface IdeaSubmissionFormProps {
   categories: Category[]
@@ -39,64 +41,42 @@ const IdeaSubmissionForm: React.FC<IdeaSubmissionFormProps> = ({ categories, onS
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-8">
       <div>
-        <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
           Title
         </label>
-        <div className="mt-1 relative rounded-md shadow-sm">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <LightBulbIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-          </div>
-          <input
-            type="text"
-            id="title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className={`pl-10 block w-full rounded-md ${
-              errors.title ? 'border-red-300' : 'border-gray-300'
-            } focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
-            placeholder="Enter the title of your idea"
-          />
-        </div>
+        <input
+          type="text"
+          id="title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className={`block w-full px-4 py-3 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-150 ease-in-out
+            ${errors.title ? 'border-red-300 ring-red-300' : 'border-gray-300'}`}
+          placeholder="Enter the title of your idea"
+        />
         {errors.title && <p className="mt-2 text-sm text-red-600">{errors.title}</p>}
       </div>
       <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
           Description
         </label>
-        <div className="mt-1 relative rounded-md shadow-sm">
-          <div className="absolute inset-y-0 left-0 pl-3 pt-3 flex items-start pointer-events-none">
-            <PencilIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-          </div>
-          <textarea
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            className={`pl-10 block w-full rounded-md ${
-              errors.description ? 'border-red-300' : 'border-gray-300'
-            } focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
-            placeholder="Describe your idea in detail"
-          />
+        <div className={`${errors.description ? 'ring-2 ring-red-300 rounded-lg' : ''}`}>
+          <TiptapEditor onChange={setDescription} initialContent={description} />
         </div>
         {errors.description && <p className="mt-2 text-sm text-red-600">{errors.description}</p>}
       </div>
       <div>
-        <label htmlFor="category" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
           Category
         </label>
-        <div className="mt-1 relative rounded-md shadow-sm">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <FolderIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-          </div>
+        <div className="relative">
           <select
             id="category"
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className={`pl-10 block w-full rounded-md ${
-              errors.category ? 'border-red-300' : 'border-gray-300'
-            } focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
+            className={`block w-full px-4 py-3 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent appearance-none transition duration-150 ease-in-out
+              ${errors.category ? 'border-red-300 ring-red-300' : 'border-gray-300'}`}
           >
             <option value="">Select a category</option>
             {categories.map((category) => (
@@ -105,20 +85,21 @@ const IdeaSubmissionForm: React.FC<IdeaSubmissionFormProps> = ({ categories, onS
               </option>
             ))}
           </select>
+          <ChevronDownIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
         </div>
         {errors.category && <p className="mt-2 text-sm text-red-600">{errors.category}</p>}
       </div>
-      <div className="flex items-center justify-end space-x-4">
+      <div className="flex items-center justify-end space-x-4 pt-6">
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          className="px-6 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
         >
           Cancel
         </button>
         <button
           type="submit"
-          className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          className="px-6 py-3 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
         >
           Submit Idea
         </button>

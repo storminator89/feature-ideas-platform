@@ -1,3 +1,4 @@
+// components/KanbanBoard.tsx
 import React, { useState, useCallback, useEffect } from 'react';
 import { Session } from 'next-auth';
 import { HandThumbUpIcon, ChatBubbleLeftEllipsisIcon, TrashIcon, UserIcon, ClockIcon, XMarkIcon, PaperAirplaneIcon, CheckIcon, ExclamationTriangleIcon, ShareIcon } from '@heroicons/react/24/outline';
@@ -154,7 +155,10 @@ const Modal: React.FC<{
             </button>
           </div>
           <div className="mt-2">
-            <p className="text-md text-gray-600 whitespace-pre-wrap">{idea.description}</p>
+            <div 
+              className="text-md text-gray-600 prose max-w-none"
+              dangerouslySetInnerHTML={{ __html: idea.description }}
+            />
             <div className="flex flex-wrap items-center mt-4 space-x-4">
               <span className="flex items-center text-sm text-gray-500">
                 <UserIcon className="h-4 w-4 mr-1" />
@@ -428,7 +432,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
           <span>{idea.votes?.length || 0}</span>
         </motion.button>
         <h4 className="font-semibold text-gray-800 mb-2 mt-8">{idea.title}</h4>
-        <p className="text-sm text-gray-600 mb-3 line-clamp-2">{idea.description}</p>
+        <div 
+          className="text-sm text-gray-600 mb-3 line-clamp-2 prose max-w-none"
+          dangerouslySetInnerHTML={{ __html: idea.description }}
+        />
         <div className="flex justify-between items-center text-xs text-gray-500 mb-2">
           <span className="flex items-center">
             <UserIcon className="h-3 w-3 mr-1" />

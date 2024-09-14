@@ -134,9 +134,16 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
           idea.id === ideaId
             ? {
               ...idea,
-              votes: idea.votes.some(vote => vote.userId === parseInt(session.user.id as string))
-                ? idea.votes.filter(vote => vote.userId !== parseInt(session.user.id as string))
-                : [...idea.votes, {
+              votes: idea.votes
+                ? idea.votes.some(vote => vote.userId === parseInt(session.user.id as string))
+                  ? idea.votes.filter(vote => vote.userId !== parseInt(session.user.id as string))
+                  : [...idea.votes, {
+                    id: Date.now(),
+                    userId: parseInt(session.user.id as string),
+                    ideaId,
+                    createdAt: new Date().toISOString()
+                  }]
+                : [{
                   id: Date.now(),
                   userId: parseInt(session.user.id as string),
                   ideaId,
@@ -362,7 +369,7 @@ const Home: NextPage<HomeProps> = ({ initialIdeas, categories }) => {
                       onSubmit={handleSubmitIdea}
                       onCancel={() => setShowSubmissionForm(false)}
                     />
-                                      </div>
+                  </div>
                 </div>
               </div>
             )}
